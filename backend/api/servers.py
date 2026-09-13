@@ -53,6 +53,15 @@ def _cols() -> str:
     """
 
 
+#: `_cols()` projects `g.slug`, `g.discover_provider`, … so every query that
+#: selects it has to join the catalog. Four of the five did not, which made
+#: creating or listing a server die with `no such column: g.slug` — one
+#: constant, so a projection and its joins cannot drift apart again.
+HOST_FROM = """FROM lan_hosts h
+        JOIN users u ON u.id = h.user_id
+        LEFT JOIN games g ON g.id = h.game_id"""
+
+
 def _public(db, c, row: dict, viewer: int) -> dict:
     """
     Shape one row for the client.
@@ -187,7 +196,7 @@ def list_servers():
                (SELECT COUNT(*) FROM server_follows sf WHERE sf.server_id = h.id) AS followers,
                (SELECT COUNT(*) FROM server_players sp WHERE sp.server_id = h.id
                   AND sp.left_at IS NULL) AS joined_players
-        FROM lan_hosts h JOIN users u ON u.id = h.user_id
+        {HOST_FROM}
         WHERE {clause}
         ORDER BY CASE h.status WHEN 'online' THEN 0 WHEN 'starting' THEN 1
                                WHEN 'full' THEN 2 WHEN 'unknown' THEN 3 ELSE 4 END,
@@ -219,7 +228,7 @@ def legacy_lan_hosts():
     db, c = current_db(), conn()
     me = my_id()
     rows = db.query(c, f"""
-        SELECT {_cols()} FROM lan_hosts h JOIN users u ON u.id = h.user_id
+        SELECT {_cols()} {HOST_FROM}
         WHERE h.archived_at IS NULL ORDER BY h.id DESC LIMIT 200""")
     out = []
     for r in rows:
@@ -235,13 +244,22 @@ def legacy_lan_hosts():
 @mod.route("/<int:sid>", methods=["GET"], auth="user", rate=None, endpoint="detail")
 def server_detail(sid: int):
     db, c = current_db(), conn()
-    row = db.query_one(c, f"SELECT {_cols()} FROM lan_hosts h JOIN users u ON u.id = h.user_id "
+    row = db.query_one(c, f"SELECT {_cols()} {HOST_FROM} "
                           f"WHERE h.id = ?", (sid,))
     if row is None:
         raise NotFound("سرور پیدا نشد")
-    if not _visible_to(db, c, my_id(), dict(row)) and not row.get("archived_at"):
-        raise Forbidden("دسترسی به این سرور مجاز نیست", code="NOT_VISIBLE")
     me = my_id()
+    archived = bool(row.get("archived_at"))
+    owner_or_admin = int(row["user_id"]) == me or is_admin_user()
+    if archived:
+        # An archived server was deleted. Skipping the visibility check because
+        # it is no longer published made every private address of a deleted
+        # server readable by anyone holding its id; owners and admins still see
+        # it, everyone else gets the same answer as if the row were gone.
+        if not owner_or_admin:
+            raise NotFound("سرور پیدا نشد")
+    elif not _visible_to(db, c, me, dict(row)):
+        raise Forbidden("دسترسی به این سرور مجاز نیست", code="NOT_VISIBLE")
     out = _public(db, c, dict(row), me)
     out["players_list"] = [dict(r) for r in db.query(c, """
         SELECT sp.player_name, sp.joined_at, sp.left_at, u.id AS user_id, u.username,
@@ -325,7 +343,7 @@ def create_server():
     _activity(db, c, me, "server_create", game_id=game_id, server_id=sid)
     _sio().emit("servers_changed", {"id": sid, "action": "created"})
     log.info("server_created", extra={"ctx": {"server_id": sid, "user_id": me, "port": port}})
-    row = db.query_one(c, f"SELECT {_cols()} FROM lan_hosts h JOIN users u ON u.id = h.user_id "
+    row = db.query_one(c, f"SELECT {_cols()} {HOST_FROM} "
                           f"WHERE h.id = ?", (sid,))
     return jsonify({"success": True, "id": sid, "server": _public(db, c, dict(row or {}), me),
                     "message": "سرور ثبت شد",
@@ -660,8 +678,14 @@ def server_stats():
         FROM lan_hosts h LEFT JOIN games g ON g.id = h.game_id
         WHERE h.archived_at IS NULL GROUP BY COALESCE(g.name, h.game_name)
         ORDER BY total DESC LIMIT 20""")
+    counts = {r["status"]: int(r["n"]) for r in db.query(c, """
+        SELECT status, COUNT(*) AS n FROM lan_hosts
+        WHERE archived_at IS NULL GROUP BY status""")}
     return jsonify({"success": True, "by_game": [
-        {"game": r["game"], "total": int(r["total"]), "online": int(r["online"] or 0)} for r in rows]})
+        {"game": r["game"], "total": int(r["total"]), "online": int(r["online"] or 0)} for r in rows],
+        "totals": {"online": counts.get("online", 0), "full": counts.get("full", 0),
+                   "starting": counts.get("starting", 0), "unknown": counts.get("unknown", 0),
+                   "offline": counts.get("offline", 0), "total": sum(counts.values())}})
 
 
 # --------------------------------------------------------------------------

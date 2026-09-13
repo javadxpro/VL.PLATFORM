@@ -37,7 +37,11 @@ def _game_dict(row: dict, *, me: int | None = None, mine: dict | None = None) ->
     out["platforms"] = [p for p in str(out.get("platforms") or "").split(",") if p]
     out["genres"] = [p for p in str(out.get("genre") or "").split(",") if p]
     out["my_status"] = (mine or {}).get("status")
-    out["my_hours"] = int((mine or {}).get("hours_real") or 0)
+    # `user_games.hours_real` counts *minutes* (every writer adds minutes), so
+    # the API says which unit it means instead of letting the column name decide.
+    _minutes = int((mine or {}).get("hours_real") or 0)
+    out["my_minutes"] = _minutes
+    out["my_hours"] = round(_minutes / 60, 2)
     out["last_played_at"] = (mine or {}).get("last_played_at")
     return out
 
@@ -243,8 +247,11 @@ def log_hours(game_id: int):
                (max(1, int(minutes / 60)), 1 if first_session else 0, me)).close()
     _activity(db, c, me, "hours", game_id=game_id, meta={"minutes": minutes})
     c.commit()
+    total_minutes = int(db.scalar(c, "SELECT COALESCE(SUM(hours_real),0) FROM user_games WHERE user_id = ?",
+                                  (me,)) or 0)
     return jsonify({"success": True, "added_minutes": minutes,
-                    "total_hours": db.scalar(c, "SELECT COALESCE(SUM(hours_real),0) FROM user_games WHERE user_id = ?", (me,))})
+                    "total_minutes": total_minutes,
+                    "total_hours": round(total_minutes / 60, 2)})
 
 
 @mod.route("/recent", auth="user", rate=None)

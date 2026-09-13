@@ -73,16 +73,27 @@ def tick(app, db: Database, storage: StorageProvider) -> dict[str, int]:
             # ---- heartbeat expiry: online -> offline (never deleted) --
             cfg = get_config()
             if db.has_table(conn, "lan_hosts"):
+                stale = f"""status = 'online' AND is_enabled = 1
+                           AND {db.is_expired_sql('last_heartbeat', cfg.heartbeat_timeout_seconds)}"""
+                # the ids first: the transition log is the only place that says
+                # *when* a server went quiet, and the sweep used to flip the
+                # status without writing it, so the timeline had a hole in it
+                dying = [int(r["id"]) for r in db.query(
+                    conn, f"SELECT id FROM lan_hosts WHERE {stale}")]
                 cur = db.execute(conn, f"""
                     UPDATE lan_hosts
                        SET status = 'offline',
                            last_status_change = {db.now_sql()},
                            heartbeat_fails = COALESCE(heartbeat_fails, 0) + 1
-                     WHERE status = 'online'
-                       AND is_enabled = 1
-                       AND {db.is_expired_sql('last_heartbeat', cfg.heartbeat_timeout_seconds)}""")
+                     WHERE {stale}""")
                 report["servers_timed_out"] = cur.rowcount
                 cur.close()
+                if dying and db.has_table(conn, "server_status_log"):
+                    marks = ", ".join("?" for _ in dying)
+                    db.execute(conn, f"""INSERT INTO server_status_log
+                                             (server_id, status, changed_by, created_at)
+                                         SELECT id, 'offline', NULL, {db.now_sql()}
+                                           FROM lan_hosts WHERE id IN ({marks})""", dying).close()
                 # stale-but-offline rows are archived, not removed
                 cur = db.execute(conn, f"""
                     UPDATE lan_hosts SET archived_at = {db.now_sql()}

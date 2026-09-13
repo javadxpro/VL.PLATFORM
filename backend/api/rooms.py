@@ -48,6 +48,15 @@ def _member_state(db, c, room_id: int, uid: int) -> dict | None:
         WHERE room_id = ? AND user_id = ? AND left_at IS NULL""", (room_id, uid))
 
 
+#: `_cols()` reads `g.` (the catalog) and `s.` (the linked server), so every room
+#: query needs these joins. Room *creation* only joined host+game and answered
+#: 500 for every client; one constant keeps the projection and its joins tied.
+ROOM_FROM = """FROM game_rooms r
+        LEFT JOIN users u ON u.id = r.host_id
+        LEFT JOIN games g ON g.id = r.game_id
+        LEFT JOIN lan_hosts s ON s.id = r.server_id"""
+
+
 def _public(db, c, row: dict, viewer: int) -> dict:
     out = dict(row)
     room_id = int(out["id"])
@@ -134,10 +143,7 @@ def list_rooms():
         SELECT {_cols()},
                (SELECT COUNT(*) FROM game_room_members gm
                  WHERE gm.room_id = r.id AND gm.left_at IS NULL) AS member_count
-        FROM game_rooms r
-        LEFT JOIN users u ON u.id = r.host_id
-        LEFT JOIN games g ON g.id = r.game_id
-        LEFT JOIN lan_hosts s ON s.id = r.server_id
+        {ROOM_FROM}
         WHERE {clause} AND r.visibility IN ('public','friends')
         ORDER BY CASE r.status WHEN 'open' THEN 0 WHEN 'starting' THEN 1
                                WHEN 'ingame' THEN 2 ELSE 3 END,
@@ -160,10 +166,7 @@ def room_detail(rid: int):
     me = my_id()
     db, c = current_db(), conn()
     row = db.query_one(c, f"""
-        SELECT {_cols()} FROM game_rooms r
-        LEFT JOIN users u ON u.id = r.host_id
-        LEFT JOIN games g ON g.id = r.game_id
-        LEFT JOIN lan_hosts s ON s.id = r.server_id WHERE r.id = ?""", (rid,))
+        SELECT {_cols()} {ROOM_FROM} WHERE r.id = ?""", (rid,))
     if row is None:
         raise NotFound("اتاق پیدا نشد")
     d = dict(row)
@@ -240,8 +243,7 @@ def create_room():
     _activity(db, c, me, "room_create", game_id=game_id, room_id=rid)
     _sio().emit("rooms_changed", {"room_id": rid, "action": "created"})
     log.info("room_created", extra={"ctx": {"room_id": rid, "user_id": me}})
-    row = db.query_one(c, f"SELECT {_cols()} FROM game_rooms r LEFT JOIN users u ON u.id = r.host_id "
-                          f"LEFT JOIN games g ON g.id = r.game_id WHERE r.id = ?", (rid,))
+    row = db.query_one(c, f"SELECT {_cols()} {ROOM_FROM} WHERE r.id = ?", (rid,))
     return jsonify({"success": True, "id": rid, "room": _public(db, c, dict(row or {}), me),
                     "message": f"اتاق «{name}» ساخته شد"}), 201
 
@@ -268,9 +270,13 @@ def join_room_endpoint(rid: int):
                                (rid, me))
         if not invited:
             raise Forbidden("این اتاق فقط با دعوت است", code="INVITE_ONLY")
-        if invited and room.get("visibility") == "private":
-            db.execute(c, "UPDATE game_room_invites SET state = 'accepted', responded_at = CURRENT_TIMESTAMP "
-                          "WHERE id = ?", (invited["id"],)).close()
+        if invited:
+            # consuming the invite is what clears the badge; leaving it 'pending'
+            # promised the user a join button for a room they are already inside
+            db.execute(c, f"""UPDATE game_room_invites
+                                 SET state = 'accepted', responded_at = {db.now_sql()}
+                               WHERE room_id = ? AND to_user_id = ? AND state = 'pending'""",
+                       (rid, me)).close()
     if room.get("visibility") == "friends" and int(room["host_id"]) not in ({me} | friends_of(db, c, me)):
         raise Forbidden("اتاق فقط برای دوستان است", code="FRIENDS_ONLY")
     if blocked_between(db, c, me, int(room["host_id"])):
@@ -537,7 +543,7 @@ def room_messages(rid: int):
         mid = db.insert(c, "INSERT INTO room_messages (room_id, user_id, content) VALUES (?, ?, ?)",
                         (rid, me, content))
         _touch(db, c, rid)
-        row = db.query_one(c, """SELECT m.*, u.full_name AS sender_name, u.username, u.avatar
+        row = db.query_one(c, """SELECT m.*, m.user_id AS sender_id, u.full_name AS sender_name, u.username, u.avatar
                                  FROM room_messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?""", (mid,))
         c.commit()
         emit_to_room_participants(_sio(), rid, "room_message", dict(row or {"id": mid}))
@@ -545,7 +551,7 @@ def room_messages(rid: int):
     limit, offset, page = pagination_args(default_size=50)
     total = db.scalar(c, "SELECT COUNT(*) FROM room_messages WHERE room_id = ?", (rid,))
     rows = db.query(c, f"""
-        SELECT m.*, u.full_name AS sender_name, u.username, u.avatar
+        SELECT m.*, m.user_id AS sender_id, u.full_name AS sender_name, u.username, u.avatar
         FROM room_messages m JOIN users u ON u.id = m.user_id
         WHERE m.room_id = ? ORDER BY m.id DESC {db.limit_offset(limit, offset)}""", (rid,))
     out = [dict(r) for r in rows]
@@ -586,9 +592,7 @@ def mine():
     me = my_id()
     db, c = current_db(), conn()
     rows = db.query(c, f"""
-        SELECT {_cols()} FROM game_rooms r
-        LEFT JOIN users u ON u.id = r.host_id
-        LEFT JOIN games g ON g.id = r.game_id
+        SELECT {_cols()} {ROOM_FROM}
         WHERE r.host_id = ? OR EXISTS (SELECT 1 FROM game_room_members gm
                                         WHERE gm.room_id = r.id AND gm.user_id = ? AND gm.left_at IS NULL)
         ORDER BY r.closed_at IS NOT NULL, r.id DESC LIMIT 40""", (me, me))
