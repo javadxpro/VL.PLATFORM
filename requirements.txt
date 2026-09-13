@@ -1,0 +1,10 @@
+# وابستگی‌های Local_Network (Volexturn)
+# نصب محلی:  pip install -r requirements.txt
+flask>=3.0
+flask-socketio>=5.3
+werkzeug>=3.0
+simple-websocket>=0.10
+
+# برای اجرای آنلاین/پروداکشن (gunicorn + gevent → پشتیبانی WebSocket)
+gunicorn>=21.2
+gevent>=23.9
