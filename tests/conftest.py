@@ -110,12 +110,15 @@ def pdf_bytes() -> bytes:
 class Actor:
     """A logged-in test user with a client that keeps its session cookie."""
 
-    def __init__(self, client, username: str, user_id: int, token: str, raw: dict):
+    def __init__(self, client, username: str, user_id: int, token: str, raw: dict,
+                 password: str = ""):
         self.client = client
         self.username = username
         self.id = user_id
         self.token = token
         self.raw = raw
+        #: kept so a test can log the same human back in after a ban/reset
+        self.password = password
 
     # --- HTTP helpers -----------------------------------------------------
     def _hdr(self) -> dict[str, str]:
@@ -169,7 +172,7 @@ def register(client, username: str, password: str = "Str0ng-Pass!phrase", **extr
     login = client.post("/login", json={"username": username, "password": password})
     body = login.get_json()
     assert login.status_code == 200 and body.get("success"), body
-    return Actor(client, username, int(body["user"]["id"]), body["token"], body)
+    return Actor(client, username, int(body["user"]["id"]), body["token"], body, password)
 
 
 @pytest.fixture()

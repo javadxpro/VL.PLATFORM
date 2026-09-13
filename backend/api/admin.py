@@ -125,10 +125,14 @@ def _users() -> tuple:
     if q:
         # `users` has no email column (the legacy schema never had one), so the
         # admin search covers exactly what exists: handle, display name, id.
-        where.append(f"(users.id = {int(q) if q.isdigit() else -1} OR "
+        # the alias is `u` in both queries below, so the column names have to
+        # match it, and the numeric id goes through a placeholder like anything
+        # else a user typed
+        numeric = int(q) if q.isdigit() else -1
+        where.append(f"(u.id = ? OR "
                      f"{db.ilike('u.username')} OR "
                      f"{db.ilike('u.full_name')})")
-        params.extend(db.ilike_params(q) * 2)
+        params.extend([numeric, *db.ilike_params(q), *db.ilike_params(q)])
     if str(request.args.get("banned", "")).lower() in {"1", "true"}:
         where.append("COALESCE(u.is_banned,0) = 1")
     if str(request.args.get("admins", "")).lower() in {"1", "true"}:

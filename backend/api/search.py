@@ -69,11 +69,17 @@ def search():
 # per-category queries
 # --------------------------------------------------------------------------
 def _search_users(db, c, q: str, limit: int, me: int) -> tuple[list[dict], int]:
-    where = f"(users.id = {int(q) if q.isdigit() else -1} OR " \
+    # The id branch is a placeholder in *both* cases. It used to be written as
+    # `users.id = {int(q) if q.isdigit() else -1}` with a params list that grew
+    # an extra value only when q was numeric — that mismatched the binding count
+    # and every numeric search (a user id, a phone number, a year) failed with
+    # "Incorrect number of bindings".
+    numeric = int(q) if q.isdigit() else -1
+    where = f"(users.id = ? OR " \
             f"{db.ilike('users.username')} OR " \
             f"{db.ilike('users.full_name')} OR " \
             f"{db.ilike('users.bio')})"
-    params = _params(db, q, 3) if not q.isdigit() else [int(q), *_params(db, q, 3)]
+    params = [numeric, *_params(db, q, 3)]
     total = db.scalar(c, f"SELECT COUNT(*) FROM users WHERE {where}", params)
     rows = db.query(c, f"""
         SELECT id, username, full_name, bio, avatar, presence, last_seen_at,
