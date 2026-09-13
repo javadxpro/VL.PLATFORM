@@ -202,6 +202,7 @@ class Config:
             min_password_length=env_int("VOLEXTURN_MIN_PASSWORD_LENGTH", 8),
             pbkdf2_iterations=env_int("VOLEXTURN_PBKDF2_ITERATIONS", 240_000),
             login_max_attempts=env_int("VOLEXTURN_LOGIN_MAX_ATTEMPTS", 8),
+            login_window_seconds=env_int("VOLEXTURN_LOGIN_WINDOW_SECONDS", 300),
             rate_capacity_default=env_int("VOLEXTURN_RATE_CAPACITY", 120),
             rate_window_default=env_int("VOLEXTURN_RATE_WINDOW", 60),
             rate_limit_enabled=env_bool("VOLEXTURN_RATE_LIMITS", True),
