@@ -133,6 +133,9 @@ class Actor:
     def put(self, url: str, json=None, **kw):
         return self.client.put(url, json=json or {}, headers=self._hdr(), **kw)
 
+    def patch(self, url: str, json=None, **kw):
+        return self.client.patch(url, json=json or {}, headers=self._hdr(), **kw)
+
     def delete(self, url: str, **kw):
         return self.client.delete(url, headers=self._hdr(), **kw)
 

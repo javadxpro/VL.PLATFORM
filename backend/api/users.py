@@ -338,12 +338,14 @@ def friend_respond():
     target = int_arg("user_id", src=body) or 0
     accept = bool_arg("accept", True, src=body)
     db, c = current_db(), conn()
-    row = db.query_one(c, """SELECT state, requested_by FROM friendships
-                             WHERE user_a = ? AND user_b = ?""", (min(me, target), max(me, target)))
-    if row is None or row["state"] != RECEIVED:
+    # `friendship_state`, not the raw column: the row is stored once per pair, so
+    # a pending request reads as 'requested' to its sender and 'received' to the
+    # receiver. Reading the column here meant the receiver always got
+    # NO_REQUEST and could never accept — while the 'I am the requester' case was
+    # already excluded by the state itself, which is why the separate NOT_YOURS
+    # guard is gone.
+    if friendship_state(db, c, me, target) != RECEIVED:
         raise NotFound("درخواستی وجود ندارد", code="NO_REQUEST")
-    if int(row.get("requested_by") or 0) == me:
-        raise Forbidden("شما فرستنده این درخواست هستید", code="NOT_YOURS")
     new_state = FRIEND if accept else NONE
     db.execute(c, f"""UPDATE friendships SET state = ?, updated_at = {db.now_sql()}
                       WHERE user_a = ? AND user_b = ?""",

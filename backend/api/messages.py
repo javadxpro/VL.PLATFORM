@@ -35,6 +35,22 @@ MSG_COLS = """
     (SELECT COUNT(*) FROM message_reactions mr WHERE mr.message_id = m.id) AS reactions_count
 """
 
+#: `MSG_COLS` reads through `r`/`ru` for the quoted-message preview, so every
+#: query that selects it must join them. Written inline in five places, four of
+#: them forgot — which 500'd sending a message, the pinned list and forwarding.
+#: One constant, so the projection and its joins cannot drift apart again.
+MSG_FROM = """FROM messages m
+        JOIN users u ON u.id = m.sender_id
+        LEFT JOIN messages r ON r.id = m.reply_to_id
+        LEFT JOIN users ru ON ru.id = r.sender_id"""
+
+
+#: A "delete for me" row is not a copy of the message: the sender keeps seeing
+#: it, so the only honest way to hide it is to filter it out per viewer in SQL
+#: (a post-fetch Python filter would break pagination counts).
+MSG_NOT_HIDDEN_FOR_ME = ("NOT EXISTS (SELECT 1 FROM message_deletes md "
+                         "WHERE md.message_id = m.id AND md.user_id = ?)")
+
 
 def _public(db, c, row: dict, viewer: int) -> dict:
     out = dict(row)
@@ -44,11 +60,11 @@ def _public(db, c, row: dict, viewer: int) -> dict:
                              or is_admin_user())
     out["can_edit"] = bool(out.get("sender_id") == viewer)
     if out.get("deleted_for_everyone"):
+        # the tombstone keeps its id so replies/forwards still resolve
         out["content"] = ""
         out["file_path"] = None
         out["file_url"] = None
         out["file_name"] = None
-    out.pop("deleted_for_me", None)
     return out
 
 
@@ -91,15 +107,13 @@ def _thread_rows(partner: int, *, limit: int, offset: int) -> tuple[list[dict], 
     db, c = current_db(), conn()
     if partner == me:
         raise BadRequest("گفتگو با خود ممکن نیست", code="SELF_CHAT")
-    where = """m.group_id IS NULL AND m.deleted_for_everyone = 0
-               AND ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))"""
-    params = [me, partner, partner, me]
+    where = f"""m.group_id IS NULL AND m.deleted_for_everyone = 0
+               AND ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
+               AND {MSG_NOT_HIDDEN_FOR_ME}"""
+    params = [me, partner, partner, me, me]
     total = db.scalar(c, f"SELECT COUNT(*) FROM messages m WHERE {where}", params)
     rows = db.query(c, f"""
-        SELECT {MSG_COLS} FROM messages m
-        JOIN users u ON u.id = m.sender_id
-        LEFT JOIN messages r ON r.id = m.reply_to_id
-        LEFT JOIN users ru ON ru.id = r.sender_id
+        SELECT {MSG_COLS} {MSG_FROM}
         WHERE {where}
         ORDER BY m.id DESC {db.limit_offset(limit, offset)}""", params)
     out = [dict(r) for r in rows]
@@ -159,12 +173,17 @@ def partners():
     if ids:
         marks = ", ".join("?" for _ in ids)
         for r in db.query(c, """
-            SELECT id, content, file_name, file_type, timestamp, sender_id
+            SELECT id, content, file_name, file_type, timestamp, sender_id, receiver_id
             FROM messages WHERE id IN (SELECT MAX(id) FROM messages
                                        WHERE (sender_id = ? OR receiver_id = ?) AND group_id IS NULL
+                                         AND deleted_for_everyone = 0
                                        GROUP BY CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END)""",
             (me, me, me)):
-            last_msgs[int(r["sender_id"])] = dict(r)
+            # key by the *partner*, not the author: the last message is usually
+            # mine, and keying it by sender_id dropped it from my own list
+            other = int(r["receiver_id"]) if int(r["sender_id"]) == me else int(r["sender_id"])
+            if other:
+                last_msgs[other] = {k: v for k, v in dict(r).items() if k != "receiver_id"}
     from .. import presence
     out = []
     for r in rows:
@@ -255,8 +274,7 @@ def send_message():
     if reply_to_id:
         db.execute(c, "UPDATE messages SET reply_count = COALESCE(reply_count,0) + 1 WHERE id = ?",
                    (reply_to_id,)).close()
-    row = db.query_one(c, f"SELECT {MSG_COLS} FROM messages m JOIN users u ON u.id = m.sender_id "
-                          f"WHERE m.id = ?", (mid,))
+    row = db.query_one(c, f"SELECT {MSG_COLS} {MSG_FROM} WHERE m.id = ?", (mid,))
     msg = dict(row or {"id": mid})
     if saved:
         msg["file_url"] = saved.url
@@ -322,9 +340,7 @@ def edit_message(mid: int | None = None):
     db.execute(c, """UPDATE messages SET content = ?, edited_at = CURRENT_TIMESTAMP,
                      search_text = ?, edited_by = ? WHERE id = ?""",
                (content, content, me, mid)).close()
-    new = db.query_one(c, f"""SELECT {MSG_COLS} FROM messages m JOIN users u ON u.id = m.sender_id
-                              LEFT JOIN messages r ON r.id = m.reply_to_id
-                              LEFT JOIN users ru ON ru.id = r.sender_id WHERE m.id = ?""", (mid,))
+    new = db.query_one(c, f"SELECT {MSG_COLS} {MSG_FROM} WHERE m.id = ?", (mid,))
     msg = dict(new or {"id": mid, "content": content})
     c.commit()
     emit_pair(_sio(), int(row["sender_id"]), row.get("receiver_id"), "message_updated", msg)
@@ -344,7 +360,11 @@ def delete_message(mid: int):
     and admins may remove. `for_me` narrows it to a single side.
     """
     me = my_id()
-    for_me = bool_arg("for_me", False) or (request.args.get("mode") == "mine")
+    # Three spellings, one meaning: the SPA sent a query flag, the new client
+    # sends `scope` in the body, and `for_me` is the explicit form.
+    body = payload()
+    mode = str(request.args.get("mode") or body.get("scope") or "").strip().lower()
+    for_me = bool_arg("for_me", False, src=body) or mode in {"mine", "me", "for_me", "for-me"}
     db, c = current_db(), conn()
     row = db.query_one(c, "SELECT * FROM messages WHERE id = ?", (mid,))
     if row is None:
@@ -466,14 +486,16 @@ def unread_counts(me_id: int | None = None):
 def group_unread():
     me = my_id()
     db, c = current_db(), conn()
+    # The cursor lives in group_seen (group_members only has `last_read_at`), so
+    # it must be read through that alias — COALESCE keeps brand-new members at 0.
     rows = db.query(c, """
-        SELECT gm.group_id, gm.last_seen_id, COUNT(m.id) AS n
+        SELECT gm.group_id, COALESCE(gs.last_seen_id, 0) AS last_seen_id, COUNT(m.id) AS n
         FROM group_members gm
         LEFT JOIN group_seen gs ON gs.group_id = gm.group_id AND gs.user_id = gm.user_id
         LEFT JOIN messages m ON m.group_id = gm.group_id AND m.sender_id != ?
-             AND m.id > COALESCE(gs.last_seen_id, 0)
+             AND m.id > COALESCE(gs.last_seen_id, 0) AND m.deleted_for_everyone = 0
         WHERE gm.user_id = ?
-        GROUP BY gm.group_id, gm.last_seen_id""", (me, me))
+        GROUP BY gm.group_id, COALESCE(gs.last_seen_id, 0)""", (me, me))
     return jsonify({"success": True, "unread": {str(r["group_id"]): int(r["n"] or 0) for r in rows}})
 
 
@@ -540,12 +562,14 @@ def pinned_in_thread():
     if gid:
         if not db.query_one(c, "SELECT 1 AS x FROM group_members WHERE group_id = ? AND user_id = ?", (gid, me)):
             raise Forbidden("عضو این گروه نیستی")
-        rows = db.query(c, f"""SELECT {MSG_COLS} FROM messages m JOIN users u ON u.id = m.sender_id
-                               WHERE m.group_id = ? AND m.pinned = 1 ORDER BY m.id DESC LIMIT 10""", (gid,))
+        rows = db.query(c, f"""SELECT {MSG_COLS} {MSG_FROM}
+                               WHERE m.group_id = ? AND m.pinned = 1 ORDER BY m.id DESC LIMIT 10""",
+                         (gid,))
     elif partner:
-        rows = db.query(c, f"""SELECT {MSG_COLS} FROM messages m JOIN users u ON u.id = m.sender_id
+        rows = db.query(c, f"""SELECT {MSG_COLS} {MSG_FROM}
                                WHERE m.group_id IS NULL AND m.pinned = 1
-                                 AND ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
+                                 AND ((m.sender_id = ? AND m.receiver_id = ?)
+                                      OR (m.sender_id = ? AND m.receiver_id = ?))
                                ORDER BY m.id DESC LIMIT 10""", (me, partner, partner, me))
     else:
         raise BadRequest("partner یا group_id لازم است", code="SCOPE_REQUIRED")
@@ -610,14 +634,13 @@ def forward_message():
                  orig.get("file_name"), orig.get("msg_type") or "text", orig.get("content")))
             sent += 1
             from ..notify import emit_group
-            row2 = db.query_one(c, f"SELECT {MSG_COLS} FROM messages m JOIN users u ON u.id = m.sender_id "
-                                    f"WHERE m.id = ?", (new_id,))
+            row2 = db.query_one(c, f"SELECT {MSG_COLS} {MSG_FROM} WHERE m.id = ?", (new_id,))
             emit_group(_sio(), int(tid), "new_message", dict(row2 or {"id": new_id}))
     c.commit()
     for a, b in emitted:
-        row2 = db.query_one(c, f"""SELECT {MSG_COLS} FROM messages m JOIN users u ON u.id = m.sender_id
-                                  WHERE m.sender_id = ? AND m.receiver_id = ? ORDER BY m.id DESC LIMIT 1""",
-                            (a, b))
+        row2 = db.query_one(c, f"""SELECT {MSG_COLS} {MSG_FROM}
+                                  WHERE m.sender_id = ? AND m.receiver_id = ?
+                                  ORDER BY m.id DESC LIMIT 1""", (a, b))
         if row2:
             emit_pair(_sio(), a, b, "new_message", dict(row2))
     return jsonify({"success": True, "sent": sent})

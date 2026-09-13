@@ -331,8 +331,9 @@ def _group_messages(gid: int, *, limit: int, offset: int) -> tuple[list[dict], i
     me = my_id()
     db, c = current_db(), conn()
     _require(db, c, gid, me)
-    where = "m.group_id = ? AND m.deleted_for_everyone = 0"
-    total = db.scalar(c, f"SELECT COUNT(*) FROM messages m WHERE {where}", (gid,))
+    from .messages import MSG_NOT_HIDDEN_FOR_ME
+    where = f"m.group_id = ? AND m.deleted_for_everyone = 0 AND {MSG_NOT_HIDDEN_FOR_ME}"
+    total = db.scalar(c, f"SELECT COUNT(*) FROM messages m WHERE {where}", (gid, me))
     rows = db.query(c, f"""
         SELECT m.*, u.full_name AS sender_name, u.username AS sender_username, u.avatar AS sender_avatar,
                r.content AS reply_content, ru.full_name AS reply_sender_name,
@@ -340,7 +341,7 @@ def _group_messages(gid: int, *, limit: int, offset: int) -> tuple[list[dict], i
         FROM messages m JOIN users u ON u.id = m.sender_id
         LEFT JOIN messages r ON r.id = m.reply_to_id
         LEFT JOIN users ru ON ru.id = r.sender_id
-        WHERE {where} ORDER BY m.id DESC {db.limit_offset(limit, offset)}""", (gid,))
+        WHERE {where} ORDER BY m.id DESC {db.limit_offset(limit, offset)}""", (gid, me))
     out = [dict(r) for r in rows]
     out.reverse()
     for row in out:
