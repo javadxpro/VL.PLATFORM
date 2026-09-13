@@ -59,7 +59,11 @@ def _has_admin() -> bool:
         db = app.extensions["volexturn_db"]
         conn = db.connect()
         try:
-            return bool(db.scalar(conn, "SELECT COUNT(*) FROM users WHERE is_admin = 1"))
+            # role, not the legacy `is_admin` column: that no longer exists, and a
+            # query that raises here used to make every boot claim "no admin exists".
+            if not db.has_table(conn, "users"):
+                return False
+            return bool(db.scalar(conn, "SELECT COUNT(*) FROM users WHERE role = 'admin'"))
         finally:
             db.close(conn)
     except Exception:                 # no table yet / broken file → treat as "not ready"
@@ -75,7 +79,7 @@ def _banner(port: int) -> str:
         f"🏠 Local:    http://localhost:{port}",
         f"🌐 Network:  http://{_lan_ip()}:{port}",
         f"🗄  Engine:  {engine} · {cfg.db_file if engine == 'sqlite' else 'PostgreSQL (DATABASE_URL)'}",
-        "🔌 Sockets:  join / leave / typing / voice_* (نیازمند توکن)",
+        "🔌 Sockets:  join / subscribe / typing / join_voice · leave_voice برای خروج",
     ]
     if not _has_admin():
         lines.append("👑 هیچ مدیری وجود ندارد — بسازید:  python -m backend create-admin")
