@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      # the same two gates the repo is held to locally: a lint pass for unused /
+      # undefined names (this codebase has no type annotations to lean on), and
+      # the suite that covers the HTTP contract the unchanged frontend calls.
+      - name: lint
+        run: |
+          pip install pyflakes
+          python -m pyflakes backend/ server.py tests/
+      # migrate-then-doctor is the real install path: doctor fails on a schema
+      # with no tables, which is exactly what a fresh checkout looks like, so the
+      # pair also proves the migration chain runs standalone (not only via
+      # create_app) and that the CLI agrees with the server about the schema.
+      - name: migrate + doctor
+        run: |
+          python -m backend migrate
+          python -m backend doctor --json
+        env:
+          VOLEXTURN_LOG_LEVEL: WARNING
+      - name: tests
+        run: python -m pytest tests/ -q
+        env:
+          VOLEXTURN_LOG_LEVEL: ERROR

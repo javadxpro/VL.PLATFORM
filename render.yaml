@@ -1,11 +1,29 @@
+# Render blueprint — the whole service is described here, so a fork can be
+# deployed without clicking through the dashboard.
 services:
   - type: web
     name: volexturn
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -k gevent -w 1 -b 0.0.0.0:$PORT server:app
+    # one worker: Socket.IO rooms and the presence map live in this process, so
+    # more workers would split the room state across processes. `--timeout` is
+    # raised because a 50 MB upload on a slow phone outlives the 30s default.
+    startCommand: gunicorn -k gevent -w 1 --timeout 120 --graceful-timeout 30 -b 0.0.0.0:$PORT server:app
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.6
-    healthCheckPath: /api/app_info
+      - key: VOLEXTURN_ENV
+        value: production
+      # With ENV=production the app refuses to boot without a signing key, so
+      # this has to be generated rather than defaulted.
+      - key: VOLEXTURN_SECRET_KEY
+        generateValue: true
+      - key: VOLEXTURN_IS_SECURE
+        value: "1"
+      # The free plan has no persistent disk, so the ephemeral filesystem would
+      # delete every upload on redeploy: Postgres is the correct choice here.
+      # Set DATABASE_URL and the app switches engines by itself.
+      - key: DATABASE_URL
+        sync: false

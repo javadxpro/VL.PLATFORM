@@ -1,6 +1,14 @@
 # داده‌های محلی - نباید در گیت برود
 database.db
+*.sqlite
+*.sqlite-*
 uploads/
 __pycache__/
 *.pyc
 .DS_Store
+
+# کلیدها و رمزها — هرگز commit نشود
+# local secrets — never commit: this file holds the session signing key
+.env
+.env.*
+!.env.example
