@@ -157,6 +157,8 @@ def _followed_ids(db, c, viewer: int) -> set[int]:
 
 @mod.route("", methods=["GET", "HEAD"], auth="user", rate=None)
 def feed():
+    """Canonical feed page: `mode` (recent/popular/…) + limit/offset paging, with
+    visibility and blocking pushed into the SQL, never filtered after the fact."""
     limit, offset, page = pagination_args(default_size=12)
     mode = sanitize_text(request.args.get("mode"), max_len=24, strip_newlines=True) or "recent"
     if mode not in FEED_MODES:

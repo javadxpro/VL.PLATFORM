@@ -27,6 +27,11 @@ jobs:
         run: |
           pip install pyflakes
           python -m pyflakes backend/ server.py tests/
+      # API.md / LEGACY_MAP.md are generated from the app's url_map, so a route
+      # can be added without anyone remembering to edit markdown. --check boots the
+      # app against a throwaway /tmp schema and diffs the two files.
+      - name: docs in sync with routes
+        run: python tools/gen_api_docs.py --check
       # migrate-then-doctor is the real install path: doctor fails on a schema
       # with no tables, which is exactly what a fresh checkout looks like, so the
       # pair also proves the migration chain runs standalone (not only via

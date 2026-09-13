@@ -154,8 +154,12 @@ Local_Network/
 │   ├── realtime.py notify.py presence.py discovery.py janitor.py
 │   └── cli.py             # python -m backend …
 ├── index.html             # رابط کاربری کامل (HTML/CSS/JS - بدون وابستگی خارجی)
-├── tests/                 # ۱۵۰ تست pytest (قرارداد API + امنیت)
+├── tests/                 # ۱۵۹ تست pytest (قرارداد API + امنیت + CLI)
+├── docs/API.md            # مرجع مسیرها — از خود برنامه تولید می‌شود
+├── docs/LEGACY_MAP.md     # نگاشت مسیر قدیمی → endpoint جدید
+├── docs/security.md       # چه اقدامی فعال است و چه چیزی عمداً انجام نشده
 ├── docs/AUDIT.md          # گزارش ممیزی نسخهٔ قبلی و هر اصلاح انجام‌شده
+├── tools/gen_api_docs.py  # تولیدکنندهٔ docs/API.md و docs/LEGACY_MAP.md
 ├── requirements.txt  .env.example  Dockerfile  Procfile  render.yaml  run.sh
 ├── static/
 │   ├── js/socket.io.min.js   # کلاینت Socket.IO (لوکال)
