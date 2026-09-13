@@ -40,16 +40,27 @@ def _db() -> Database:
     return Database(engine=cfg.db_engine, db_path=str(cfg.db_file), pg_dsn=cfg.pg_dsn)
 
 
+#: set while `--json` is in effect. A machine-readable run must emit *only* the
+#: document — one human line in front of it is enough to break
+#: `python -m backend doctor --json | jq`.
+_QUIET = False
+
+
+def _say(msg: str) -> None:
+    if not _QUIET:
+        print(msg)
+
+
 def _ok(msg: str) -> None:
-    print(f"  ✅ {msg}")
+    _say(f"  ✅ {msg}")
 
 
 def _warn(msg: str) -> None:
-    print(f"  ⚠️  {msg}")
+    _say(f"  ⚠️  {msg}")
 
 
 def _fail(msg: str) -> None:
-    print(f"  ❌ {msg}")
+    _say(f"  ❌ {msg}")
 
 
 def _echo(value: Any, as_json: bool) -> None:
@@ -197,8 +208,14 @@ def cmd_token(args: argparse.Namespace) -> int:
             return 1
         sess = issue_session(db, conn, int(row["id"]), device="cli", user_agent="volexturn-cli")
         conn.commit()
-        _echo({"user_id": int(row["id"]), "token": sess.token,
-               "expires_at": sess.expires_at.isoformat(sep=" ")}, args.json)
+        # A bare token on stdout by default, so `TOKEN=$(python -m backend token
+        # alice)` pastes straight into an Authorization header; --json for the
+        # document with the expiry and id.
+        if args.json:
+            _echo({"user_id": int(row["id"]), "token": sess.token,
+                   "expires_at": sess.expires_at.isoformat(sep=" ")}, True)
+        else:
+            _say(sess.token)
         return 0
     finally:
         db.close(conn)
@@ -321,7 +338,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     notes: dict[str, Any] = {}
 
     def report(title: str) -> None:
-        print(f"\n🩺 {title}")
+        _say(f"\n🩺 {title}")
 
     def bad(msg: str) -> None:
         problems.append(msg)
@@ -336,8 +353,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         _ok(f"Python {major_minor(minor)}")
     for pkg in ("flask", "flask_socketio", "engineio", "socketio"):  # engineio/socketio are the real transports
         try:
-            mod = importlib.import_module(pkg)
-            _ok(f"{pkg} {getattr(mod, '__version__', '?')}")
+            importlib.import_module(pkg)
+            _ok(f"{pkg} {_ver(pkg)}")
         except ImportError as exc:
             bad(f"{pkg} قابل import نیست: {exc}")
     notes["async_drivers"] = _async_drivers()
@@ -380,7 +397,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if db.has_table(conn, "vx_schema_version"):
             version = db.scalar(conn, "SELECT MAX(version) FROM vx_schema_version")
         from .migrations import expected_version, pending_count
-        pending = pending_count(db, conn)
+        pending = pending_count(db)
         if version is None:
             _warn("جدول vx_schema_version نیست — با `python -m backend migrate` بسازید")
         else:
@@ -407,16 +424,22 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
         # ---- the legacy default-password regression ----
         report("Legacy default credentials")
-        admins = db.query(conn, "SELECT id, username, password FROM users WHERE role = 'admin' LIMIT 25")
-        if not admins:
-            _warn("هیچ ادمینی وجود ندارد — `python -m backend create-admin`")
+        if not db.has_table(conn, "users"):
+            # the whole point of doctor is that it runs *before* you fix the
+            # install, so an unmigrated database is a warning, not a traceback
+            _warn("جدول users هنوز ساخته نشده — اول `python -m backend migrate`")
         else:
-            from .security import verify_password
-            weak = [r["username"] for r in admins if verify_password("admin123", r["password"])]
-            if weak:
-                bad(f"ادمین با رمز پیش‌فرض قدیمی: {', '.join(weak)} — فوراً عوض کنید")
+            admins = list(db.query(conn, "SELECT id, username, password FROM users "
+                                         "WHERE role = 'admin' LIMIT 25"))
+            if not admins:
+                _warn("هیچ ادمینی وجود ندارد — `python -m backend create-admin`")
             else:
-                _ok(f"{len(admins)} ادمین، هیچ‌کدام با رمز پیش‌فرض admin123 نیستند")
+                from .security import verify_password
+                weak = [r["username"] for r in admins if verify_password("admin123", r["password"])]
+                if weak:
+                    bad(f"ادمین با رمز پیش‌فرض قدیمی: {', '.join(weak)} — فوراً عوض کنید")
+                else:
+                    _ok(f"{len(admins)} ادمین، هیچ‌کدام با رمز پیش‌فرض admin123 نیستند")
         conn.commit()
     finally:
         db.close(conn)
@@ -459,14 +482,34 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     # ---- realtime ----
     report("Realtime")
     try:
-        import flask_socketio as fs
-        _ok(f"flask-socketio {getattr(fs, '__version__', '?')} · drivers: {notes['async_drivers']}")
+        importlib.import_module("flask_socketio")   # presence check
+        _ok(f"flask-socketio {_ver('flask_socketio')} · drivers: {notes['async_drivers']}")
         if notes["async_drivers"] == []:
             _warn("هیچ async driver نصب نیست؛ threading mode کار می‌کند ولی gevent/eventlet سریع‌تر است")
     except ImportError as exc:
         bad(f"flask_socketio نیست: {exc}")
 
     return _finish(notes, problems, args)
+
+
+def _ver(pkg: str) -> str:
+    """
+    The installed version of *pkg* as a string.
+
+    Read from the distribution metadata rather than ``module.__version__``,
+    which Flask deprecated and removes in 3.2 — a diagnostic that breaks
+    because of a deprecation is worse than no diagnostic.
+    """
+    for name in (pkg, pkg.replace("_", "-")):
+        try:
+            import importlib.metadata as md
+            return md.version(name)
+        except Exception:  # noqa: BLE001 - no metadata for vendored/editable installs
+            continue
+    try:
+        return str(getattr(importlib.import_module(pkg), "__version__", "?"))
+    except Exception:  # noqa: BLE001
+        return "?"
 
 
 def major_minor(v) -> str:
@@ -489,11 +532,11 @@ def _finish(notes: dict[str, Any], problems: list[str], args: argparse.Namespace
     if args.json:
         _echo({"ok": not problems, "problems": problems, **notes}, True)
         return 1 if problems else 0
-    print()
+    _say("")
     if problems:
-        print(f"❌ {len(problems)} مشکل پیدا شد")
+        _say(f"❌ {len(problems)} مشکل پیدا شد")
         return 1
-    print("✅ همه‌چیز درست به نظر می‌رسد")
+    _say("✅ همه‌چیز درست به نظر می‌رسد")
     return 0
 
 
@@ -529,6 +572,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     tk = sub.add_parser("token", help="print a session token (dev only)")
     tk.add_argument("username")
+    tk.add_argument("--json", action="store_true", help="print {user_id, token, expires_at}")
     tk.set_defaults(fn=cmd_token)
 
     rt = sub.add_parser("routes", help="list HTTP surface")
@@ -546,6 +590,8 @@ def build_parser() -> argparse.ArgumentParser:
     sw.set_defaults(fn=cmd_sweep)
 
     dr = sub.add_parser("doctor", help="pre-flight checks")
+    dr.add_argument("--json", action="store_true",
+                    help="machine-readable {ok, problems, …} on stdout, for CI and health probes")
     dr.set_defaults(fn=cmd_doctor)
     return p
 
@@ -559,6 +605,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         print("\n💡 مثلاً:  python -m backend doctor   |   python -m backend run")
         return 0
+    global _QUIET
+    # `--json` means "stdout is a machine stream": human lines are silenced,
+    # errors keep going to stderr. The reset is for in-process callers (tests,
+    # embedders) that would otherwise inherit a muted CLI.
+    _QUIET = bool(getattr(args, "json", False))
     try:
         return int(args.fn(args) or 0)
     except KeyboardInterrupt:
@@ -570,6 +621,8 @@ def main(argv: list[str] | None = None) -> int:
         if os.environ.get("VOLEXTURN_CLI_TRACEBACK"):
             raise
         return 1
+    finally:
+        _QUIET = False
 
 
 if __name__ == "__main__":                                       # pragma: no cover

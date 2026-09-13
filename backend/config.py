@@ -217,6 +217,8 @@ class Config:
             discovery_timeout_seconds=env_float("VOLEXTURN_DISCOVERY_TIMEOUT", 1.5),
             discovery_networks=tuple(env_list("VOLEXTURN_DISCOVERY_NETWORKS")),
             heartbeat_timeout_seconds=env_int("VOLEXTURN_HEARTBEAT_TIMEOUT", 180),
+            server_offline_grace_seconds=env_int("VOLEXTURN_OFFLINE_GRACE", 24 * 3600),
+            janitor_interval_seconds=env_int("VOLEXTURN_JANITOR_INTERVAL", 60),
             room_stale_minutes=env_int("VOLEXTURN_ROOM_STALE_MINUTES", 720),
             dev_mode=env_bool("VOLEXTURN_DEV_MODE", False),
             log_level=env_str("VOLEXTURN_LOG_LEVEL", "INFO").upper(),
