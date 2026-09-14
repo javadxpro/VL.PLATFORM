@@ -1,0 +1,112 @@
+# مجوز نرم‌افزار Volexturn — تمام حقوق محفوظ است
+# Software license for Volexturn — All Rights Reserved
+#
+# صاحب اثر / Rights holder : javadxpro (Volexturn)        ← اگر شخص/شرکت دیگری است، همین خط را عوض کنید
+# تماس برای اجازه / Contact : از طریق Security Advisory همان مخزن (بخش «گزارش آسیب‌پذیری» در docs/security.md)
+# تاریخ این نسخه / Date     : 2026-09-14
+#
+# این فایل «لایسنس» به معنای مجاز‌دادن نیست؛ دقیقاً برعکس، اعلام عدم اعطای هیچ حقی است.
+# This file is not a permission grant; it is an explicit declaration that none is given.
+
+--------------------------------------------------------------------------
+بخش فارسی
+--------------------------------------------------------------------------
+
+حق نشر و پخش، ترجمه، اقتباس، بهره‌برداری اقتصادی و تمام سایر حقوق مادی و معنوی
+این اثر برای صاحب اثر محفوظ است (قانون حمایت حقوق مؤلفان و مصنفان و هنرمندان).
+
+هیچ مجوزی، هیچ‌گونه استفاده‌ای، و هیچ حقی — اعم از صریح، ضمنی، با مرور زمان،
+یا به استناد در دسترس بودن کد در یک مخزن — به هیچ شخص حقیقی یا حقوقی اعطا
+نمی‌شود. به‌طور مشخص، بدون اجازهٔ کتبی و صریح صاحب اثر، هیچ کاری مجاز نیست:
+
+  1. اجرا کردن، میزبانی کردن، یا در اختیار دیگران گذاشتن نرم‌افزار — حتی روی
+     شبکهٔ محلی، حتی بدون دریافت وجه، حتی برای تست، آموزش یا نمایش؛
+  2. کپی، بازتولید، انتشار، fork عمومی، آپلود در هر مخزن یا سرویس میزبانی فایل؛
+  3. تغییر، اصلاح، رفع‌باگ، بومی‌سازی رابط، یا ساخت اثر مشتق؛
+  4. مهندسی معکوس، غیرقابل‌فهم‌سازی‌زدایی، یا استخراج منبع از باینری/پاسخ‌های API
+     (در حدودی که قانون اجازهٔ چنین محدودیتی را بدهد، این کار ممنوع اعلام می‌شود؛
+     در غیر این صورت آن محدودیت نافذ نیست و متن دیگر این بند به قوت خود باقی است)؛
+  5. استفاده از خروجی، داده، لاگ، تصاویر، فونت‌ها یا متون این پروژه برای آموزش،
+     تنظیم دقیق یا ارزیابی هر مدل زبانی یا مدل هوش مصنوعی؛
+  6. استفاده از نام، نشان، یا «Volexturn» در نام پروژهٔ دیگر، تبلیغ، یا دامنه.
+
+اجازه فقط به شکل کتبی، محدود، غیرانحصاری و قابل‌ابطال است و در خود نوشته می‌شود
+که کدام نسخه، روی کدام دستگاه/دامنه، و تا چه زمانی معتبر است. هیچ رفتار مالک
+(پاسخ دادن به سؤال، پذیرفتن گزارش باگ، یا منتشرکردن نسخهٔ آزمایشی) اجازهٔ ضمنی
+ایجاد نمی‌کند.
+
+نسخه‌ای از این نرم‌افزار که به دستتان می‌رسد — از هر مسیر، حتی از یک fork غیرمجاز —
+همین شرایط را با خود حمل می‌کند و حذف یا تغییر این فایل مجاز نیست.
+
+این نرم‌افزار «همان‌طور که هست» ارائه می‌شود، بدون هیچ ضمانتی، صریح یا ضمنی،
+از جمله ضمانت‌های قابل‌بازارشدن، مناسب‌بودن برای یک کاربرد خاص، عدم‌نفوذ به حقوق
+دیگران، و کاری‌کردن بی‌وقفه یا بدون خطا. مسئولیت هیچ زیانی — مستقیم، غیرمستقیم،
+موردی، نمونه‌ای یا پیامدی، از جمله از‌دست‌رفتن داده یا توقف کسب‌وکار — صرف‌نظر
+از نظریهٔ حقوقی ادعا و حتی اگر احتمال وقوع آن را به ما گفته باشند، بر عهدهٔ صاحب
+اثر یا مشارکت‌کنندگان نیست. سقف مسئولیت هر شخص در هر حالت، صفر است.
+
+هیچ‌یک از بندهای بالا حقوقی را که به‌موجب قانون نمی‌توان محدود کرد (مثلاً حقوق
+معتبرِ استناد منصفانه، استفادهٔ شخصی از اثر خودِ کاربر، یا ضمانت‌های الزامی
+مصرف‌کننده در حقوقی که چنین چیزی را امپریتیو می‌دانند) از بین نمی‌برد؛ اگر
+دادگاهی بند یا کل این مجوز را نافذ دانست، فقط همان بخش کنار گذاشته می‌شود و
+بقیه — از جمله اعلام مالکیت و ممنوعیت‌های منتشرکردن — سر جایش می‌ماند.
+
+حقوق کامپوننت‌های شخص ثالث که در این مخزن آمده (کلاینت Socket.IO، فونت وزیرمتن و
+کتابخانه‌های نصب‌شده با pip) تحت مجوز خودشان محفوظ است و هیچ‌یک از بندهای بالا
+ادعای مالکیت بر آن‌ها نمی‌کند؛ فایل THIRD_PARTY_NOTICES.md را ببینید.
+
+--------------------------------------------------------------------------
+English
+--------------------------------------------------------------------------
+
+Copyright (c) 2026 javadxpro (Volexturn). All rights reserved.
+
+No license or right of any kind is granted to any person or entity, whether
+express, implied, by estoppel, or by virtue of this source being available in a
+repository. Without prior written permission from the copyright owner, and to
+the maximum extent the law permits, you may NOT:
+
+  1. run, host, serve, or otherwise make the software available to anyone —
+     including locally, on a private network, non-commercially, for evaluation,
+     education, or demonstration;
+  2. copy, reproduce, publish, mirror, fork publicly, or upload the software to
+     any repository, package index, or file host;
+  3. modify, adapt, translate, rebrand, or create derivative works;
+  4. reverse engineer, decompile, disassemble, or extract source from binaries
+     or from API responses (to the extent such restriction is unenforceable in
+     your jurisdiction, that restriction alone is inoperative and the remainder
+     of this license continues in full force);
+  5. use the software, its output, its data, its logs, its text, or its fonts to
+     train, fine-tune, align, or evaluate any machine-learning or language model;
+  6. use the name "Volexturn", or any associated mark, in another project's
+     name, in advertising, or as a domain.
+
+Permission exists only as a written, non-exclusive, revocable instrument that
+names the exact version, the machine or domain, and the term. Nothing the owner
+does informally — answering a question, accepting a bug report, shipping a build
+for review — creates or evidences a license.
+
+Every copy of the software, however obtained (including through an
+unauthorized fork), carries these terms; removing or altering this file is not
+permitted.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND UNINTERRUPTED OR ERROR-FREE
+OPERATION. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY — DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL (INCLUDING LOSS OF DATA OR BUSINESS INTERRUPTION),
+WHETHER IN AN ACTION OF CONTRACT, TORT (INCLUDING NEGLIGENCE) OR OTHERWISE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. THE TOTAL AGGREGATE LIABILITY
+OF ALL COPYRIGHT HOLDERS AND CONTRIBUTORS IS ZERO.
+
+This license does not purport to waive rights that applicable law makes
+non-waivable (fair dealing / fair use, a user's own private copying, mandatory
+consumer guarantees where they apply). If a court holds any provision or this
+license as a whole unenforceable, only that part falls away; the assertion of
+ownership and the prohibition on redistribution remain.
+
+Third-party components shipped in this repository (the Socket.IO client, the
+Vazirmatn fonts, and the pip-installed dependencies) remain under their own
+licenses, which this file neither grants nor restricts — see
+THIRD_PARTY_NOTICES.md.
