@@ -43,10 +43,17 @@
 
 ### روی Termux (اندروید):
 ```bash
-pkg install cloudflared -y
-python server.py &          # داخل پوشه پروژه
+pkg update -y && pkg install -y python git cloudflared
+git clone https://github.com/javadxpro/VL.PLATFORM.git && cd VL.PLATFORM
+bash ./termux.sh install     # pip install -r requirements-core.txt + migrate + doctor
+bash ./termux.sh bg          # سرور در پس‌زمینه + wake-lock (لاگ: ~/volexturn.log)
 cloudflared tunnel --url http://localhost:5000
 ```
+
+> `requirements.txt` را در Termux نصب نکن: `gevent` آنجا build نمی‌شود. نصب کامل،
+> بوت خودکار، تنظیم باتری و عیب‌یابی → `docs/TERMUX.md`.
+> بدون تانل هم می‌شود: روی همان WiFi با `http://<IP-گوشی>:5000` (بدون HTTPS —
+> فقط برای شبکهٔ قابل‌اعتماد).
 
 > لینک trycloudflare موقتی است (تا وقتی tunnel باز است). با حساب رایگان Cloudflare + دامنه شخصی می‌توانی **لینک دائمی با اسم دلخواه** بسازی:
 > ```bash

@@ -1,10 +1,18 @@
-# وابستگی‌های Local_Network (Volexturn)
-# نصب محلی:  pip install -r requirements.txt
-flask>=3.0
-flask-socketio>=5.3
-werkzeug>=3.0
-simple-websocket>=0.10
+# وابستگی‌های Volexturn — نصب کامل (دسکتاپ/سرور/کانتینر)
+#   pip install -r requirements.txt
+#
+# روی Termux/اندروید این فایل را نصب نکن: `gevent` آنجا build نمی‌شود و
+# `gunicorn` هم قابل اتکا نیست. به جایش:
+#   pip install -r requirements-core.txt
+# (و برای راهنمای کامل: docs/TERMUX.md)
+-r requirements-core.txt
 
-# برای اجرای آنلاین/پروداکشن (gunicorn + gevent → پشتیبانی WebSocket)
+# برای اجرای آنلاین/پروداکشن (gunicorn + gevent → ظرفیت WebSocket بالاتر)
 gunicorn>=21.2
 gevent>=23.9
+
+# درایور همگام PostgreSQL. لازم است هر جا DATABASE_URL ست شده باشد — از جمله
+# render.yaml که روی Render یک دیتابیس Postgres می‌سازد؛ بدون این خط create_app()
+# هنگام ساخت engine می‌شکند (backend/db.py اول psycopg3 و بعد psycopg2 را امتحان
+# می‌کند، پس هیچ‌کدام نصب نباشد فقط SQLite کار می‌کند).
+psycopg2-binary>=2.9

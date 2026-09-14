@@ -1,0 +1,16 @@
+# وابستگی‌های خودِ برنامه — همه pure-Python، بدون build کردن کد C.
+#
+# برای دستگاه‌هایی که gevent/gunicorn ندارند یا نمی‌سازند: Termux/اندروید و
+# هر نصبی که فقط «اجرای محلی» می‌خواهد. دسکتاپ/سرور می‌تواند `requirements.txt`
+# کامل را نصب کند (که همین فایل را هم می‌خواند).
+#
+# در این حالت برنامه با threading اجرا می‌شود و Socket.IO (+WebSocket) هم با
+# simple-websocket کار می‌کند؛ gevent فقط ظرفیت اتصال بیشتر می‌دهد.
+flask>=3.0
+flask-socketio>=5.3
+werkzeug>=3.0
+simple-websocket>=0.10
+
+# اختیاری ولی بی‌ضرر: بدونش `backend/config.py` فایل .env را نمی‌خواند
+# (import داخل try است، پس نبودنش خطا نمی‌دهد) و مجبوری env را export کنی.
+python-dotenv>=1.0
