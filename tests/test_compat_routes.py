@@ -122,3 +122,22 @@ def test_unknown_route_is_json_not_html(client):
     body = resp.get_json()
     assert body["success"] is False
     assert body.get("message")
+
+def test_page_version_literal_matches_the_server(app, client):
+    """
+    `boot()` in index.html compares its own `APP_VERSION` literal against
+    `/api/app_info` and toasts "clear your cache" when they differ. The literal
+    lives in a file that ships from the server, so a stale *cache* is not what a
+    mismatch means — a bumped `Config.app_version` with an un-bumped literal means
+    every user gets a red "clear the cache" message that clearing the cache cannot
+    fix. That is exactly what happened (page 3.0.0 vs server 4.0.0).
+    """
+    import re
+    from backend.config import get_config
+
+    html = client.get("/").get_data(as_text=True)
+    page = re.search(r"const APP_VERSION = '([^']+)'", html)
+    assert page, "the version literal the boot check reads is gone from index.html"
+    assert page.group(1) == get_config().app_version, (
+        f"index.html says {page.group(1)}, the server says {get_config().app_version}")
+

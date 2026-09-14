@@ -51,6 +51,35 @@ def _say(msg: str) -> None:
         print(msg)
 
 
+def _ensure_schema(db: Database, *, why: str) -> None:
+    """
+    Bring the schema up to date before a command reads tables.
+
+    `create-admin` is a *bootstrap* command: on a fresh install it is normally run
+    before the server has ever booted, and the migration that `create_app()` does on
+    startup has therefore not happened yet. It used to die with
+
+        ❌ OperationalError: no such table: users
+
+    which reads like a broken install instead of a missing first step — and worse,
+    someone who misses that line on stderr ends up with no admin row at all, then
+    a login screen that only says "نام کاربری یا رمز عبور اشتباه است".
+
+    Migrations are idempotent, so this costs nothing on an already-migrated
+    database. `doctor` deliberately does *not* call it: a diagnostic must not
+    change the state it is reporting on.
+    """
+    from . import migrations
+    try:
+        report = migrations.run_migrations(db)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a CLI error, not a trace
+        raise SystemExit(f"❌ مهاجرت اسکیمای دیتابیس نشد: {type(exc).__name__}: {exc}") from exc
+    if report.errors:
+        raise SystemExit("❌ مهاجرت با خطا تمام شد: " + "; ".join(report.errors[:3]))
+    if report.applied:
+        _say(f"  · {len(report.applied)} مهاجرت اعمال شد تا نسخه {report.current_version} ({why})")
+
+
 def _ok(msg: str) -> None:
     _say(f"  ✅ {msg}")
 
@@ -113,6 +142,7 @@ def cmd_create_admin(args: argparse.Namespace) -> int:
     """
     from .security import check_password_strength, hash_password
     db = _db()
+    _ensure_schema(db, why="scaffold for create-admin")
     conn = db.connect()
     try:
         row = db.query_one(conn, "SELECT id, role FROM users WHERE username = ?", (args.username,))
@@ -164,6 +194,7 @@ def cmd_passwd(args: argparse.Namespace) -> int:
     from .auth import revoke_user_sessions
     from .security import check_password_strength
     db = _db()
+    _ensure_schema(db, why="passwd needs the users table")
     conn = db.connect()
     try:
         row = db.query_one(conn, "SELECT id FROM users WHERE username = ?", (args.username,))
@@ -200,6 +231,7 @@ def cmd_token(args: argparse.Namespace) -> int:
         return 2
     from .auth import issue_session
     db = _db()
+    _ensure_schema(db, why="sessions live in the schema")
     conn = db.connect()
     try:
         row = db.query_one(conn, "SELECT id FROM users WHERE username = ?", (args.username,))
@@ -272,7 +304,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     """
     from .storage import get_storage
     from .uploads import referenced_keys
-    db, conn = _db(), None
+    db = _db()
+    _ensure_schema(db, why="sweep reads upload rows")
     conn = db.connect()
     try:
         refs = referenced_keys(db, conn)

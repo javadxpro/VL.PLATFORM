@@ -424,6 +424,7 @@ svg.ic { flex-shrink:0; }
 .toast.success .t-ic { background:rgba(16,185,129,.15); color:var(--success); }
 .toast.error .t-ic { background:rgba(239,68,68,.15); color:var(--danger); }
 .toast.info .t-ic { background:rgba(99,102,241,.15); color:var(--primary-light); }
+.toast.warning .t-ic { background:rgba(245,158,11,.16); color:var(--warning); }
 
 /* دکمه منوی شناور + کشوی ناوبری موبایل (اسلاید از راست) */
 .nav-fab { display:none; position:fixed; bottom:18px; right:18px; z-index:900; width:54px; height:54px; border-radius:50%; border:none; background:var(--grad); color:#fff; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 8px 26px rgba(99,102,241,.45); transition:transform .25s, opacity .25s; }
@@ -1023,7 +1024,7 @@ svg.ic { flex-shrink:0; }
 
 <script>
 /* ═══════════ وضعیت سراسری ═══════════ */
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '4.0.0';   // باید با Config.app_version در backend/config.py یکی باشد (تست: tests/test_cli.py)
 const MB = 1024 * 1024;
 const LIMITS = { image: 5 * MB, video: 10 * MB, file: 50 * MB };
 
@@ -1100,7 +1101,8 @@ function toast(msg, type = 'info', ms = 3400) {
     const icons = {
         success: '<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
         error: '<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
-        info: '<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+        info: '<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+        warning: '<svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
     };
     const el = document.createElement('div');
     el.className = `toast ${type}`;
@@ -2669,7 +2671,10 @@ function logout() {
     // تشخیص مغایرت نسخه صفحه با سرور (مثلاً فایل قدیمی کش‌شده)
     fetch('/api/app_info').then(r => r.json()).then(info => {
         if (info.version && info.version !== APP_VERSION) {
-            toast('نسخه صفحه (' + APP_VERSION + ') با سرور (' + info.version + ') فرق دارد — صفحه را با پاک‌کردن کش رفرش کن', 'error', 9000);
+            // صفحه‌ای که در حافظهٔ مرورگر مانده با سرور نمی‌خواند. رفرش سخت
+            // (Ctrl+Shift+R / کشوی Termux → Reload) کافی است؛ پاک‌کردن کش
+            // localStorage چیزی را درست نمی‌کند، چون این فایل از سرور تازه می‌آید.
+            toast('نسخه صفحه (' + APP_VERSION + ') با سرور (' + info.version + ') فرق دارد — یک بار رفرش سخت بکن', 'warning', 9000);
         }
     }).catch(() => {});
     const savedTheme = localStorage.getItem('volexturn_theme');

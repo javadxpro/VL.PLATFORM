@@ -8,12 +8,13 @@ Public surface:
 
 The layout is deliberately flat: one module per concern, `backend/api/*` for
 HTTP surface, `backend/app.py` as the only place that knows about Flask.
-See docs/architecture.md for the map and docs/api.md for the endpoint table.
+See README (معماری و نحوهٔ اجرا), docs/API.md for the endpoint table and
+docs/LEGACY_MAP.md for the pre-upgrade routes; docs/security.md for the guards.
 """
 
 from __future__ import annotations
 
-__version__ = "2.0.0"
+__version__ = "4.0.0"   # همان Config.app_version در backend/config.py — یکی را عوض کنی، دیگری را هم
 __all__ = ["create_app", "run", "__version__"]
 
 

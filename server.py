@@ -29,7 +29,6 @@ import sys
 # gunicorn را از دایرکتوری دیگری اجرا می‌کنید).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from backend import __version__ as APP_VERSION            # noqa: E402
 from backend.app import create_app, socketio              # noqa: E402
 from backend.config import get_config                     # noqa: E402
 from backend.log import get_logger                        # noqa: E402
@@ -75,7 +74,7 @@ def _banner(port: int) -> str:
     engine = cfg.db_engine
     lines = [
         "=" * 62,
-        f"🚀 {APP_NAME} Super-App v{APP_VERSION}",
+        f"🚀 {APP_NAME} Super-App v{get_config().app_version}",
         f"🏠 Local:    http://localhost:{port}",
         f"🌐 Network:  http://{_lan_ip()}:{port}",
         f"🗄  Engine:  {engine} · {cfg.db_file if engine == 'sqlite' else 'PostgreSQL (DATABASE_URL)'}",

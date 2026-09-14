@@ -64,6 +64,62 @@ def test_doctor_survives_a_database_with_no_schema(app, tmp_path):
     assert "مهاجرت" in out or "migrate" in out, out
 
 
+def test_create_admin_bootstraps_an_unmigrated_database(app, tmp_path):
+    """
+    The install order an operator actually follows: create the admin *before* the
+    server has ever booted. `create_app()` migrates on startup, so until then the
+    `users` table does not exist, and `create-admin` used to answer with
+
+        ❌ OperationalError: no such table: users
+
+    which looks like a broken install, not a missing step. The row was never
+    created, and the login screen then reported bad credentials — a failed install
+    that blames the user's password.
+    """
+    from backend.config import get_config, set_config
+    from dataclasses import replace
+    cfg = get_config()
+    fresh = tmp_path / "never-booted.sqlite"
+    set_config(replace(cfg, db_path=str(fresh)))
+    try:
+        assert not fresh.exists(), "this test is only meaningful on a database that has no schema"
+        code, out = run(["create-admin", "-u", "firstadmin", "-p", "Bootstrap-Pass!2026"])
+        assert code == 0, out
+        assert "مهاجرت اعمال شد" in out, out          # it migrated the schema itself
+        # and the account is really there — same command twice must not fail
+        code2, out2 = run(["create-admin", "-u", "firstadmin"])
+        assert code2 == 0 and "already" in out2, out2
+        # doctor, which must stay read-only, now agrees that the schema is fine
+        code3, out3 = run(["doctor", "--json"])
+        import json as _json
+        doc = _json.loads(out3)
+        assert code3 == 0 and doc["ok"] is True, out3
+        assert doc["rows"]["users"] == 1, doc["rows"]
+    finally:
+        set_config(cfg)
+
+
+def test_passwd_and_token_survive_a_fresh_database(app, tmp_path):
+    """Same bootstrap for the other two commands that touch `users`."""
+    from backend.config import get_config, set_config
+    from dataclasses import replace
+    cfg = get_config()
+    fresh = tmp_path / "second-boot.sqlite"
+    set_config(replace(cfg, db_path=str(fresh)))
+    try:
+        # a user that does not exist is a clean "not found", not a crash
+        code, out = run(["passwd", "ghost", "-p", "Whatever!12345"])
+        assert code == 1 and "نیست" in out, out
+        code, out = run(["token", "ghost"])
+        assert code == 1, out
+        assert "پیدا نشد" in out, out
+        # and the schema is now migrated, so a real admin can be made
+        assert run(["create-admin", "-u", "adm", "-p", "Bootstrap-Pass!2026"])[0] == 0
+        assert len(run(["token", "adm"])[1].strip()) >= 32
+    finally:
+        set_config(cfg)
+
+
 def test_migrate_is_idempotent_and_reports_the_version(app, tmp_path):
     from backend.config import get_config, set_config
     from dataclasses import replace
