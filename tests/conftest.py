@@ -198,6 +198,11 @@ def admin(app, client):
         uid = db.insert(conn, """INSERT INTO users (username, password, full_name, bio, role, status)
                                  VALUES ('root', ?, 'Root Admin', 'administrator', 'admin', 'active')""",
                        (hash_password("Adm1n-Str0ng-Pass!"),))
+        # the fixture inserts the row itself (not via /register), so it owes the
+        # same identity every creation path assigns — kept here so admin-driven
+        # tests see exactly what a real admin account looks like
+        from backend import vlid
+        vlid.assign(db, conn, int(uid))
         conn.commit()
     finally:
         db.close(conn)

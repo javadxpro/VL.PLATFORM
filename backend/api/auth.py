@@ -24,7 +24,7 @@ import ipaddress
 from flask import g, jsonify, request, make_response
 
 from . import Module, conn, current_db, my_id, payload, text_field
-from .. import presence
+from .. import presence, vlid
 from ..auth import (as_user_dict, clear_session_cookie, is_past, issue_session,
                     resolve_session, revoke_session, revoke_user_sessions,
                     session_is_valid, set_password, set_session_cookie, to_db_ts,
@@ -97,6 +97,9 @@ def register():
          bio or "کاربر Volexturn"))
     db.insert(c, "INSERT INTO gaming_profiles (user_id, gamertag) VALUES (?, ?)", (uid, username))
     db.insert(c, """INSERT INTO user_settings (user_id) VALUES (?)""", (uid,))
+    # every account gets its VL ID at creation (docs/ROADMAP.md P1) — see
+    # tests/test_vlid.py for the guard that keeps new signup paths from skipping this
+    vlid.assign(db, c, uid)
     conn().commit()
     log.info("user_registered", extra={"ctx": {"user_id": uid, "username": username}})
     return jsonify({"success": True,
@@ -390,6 +393,7 @@ def setup_admin():
     db.insert(c, "INSERT INTO gaming_profiles (user_id, gamertag) VALUES (?, ?)", (uid, username))
     if not db.query_one(c, "SELECT user_id FROM user_settings WHERE user_id = ?", (uid,)):
         db.insert(c, "INSERT INTO user_settings (user_id) VALUES (?)", (uid,))
+    vlid.assign(db, c, uid)
     c.commit()
     log.info("admin_created", extra={"ctx": {"user_id": uid, "via": how, "ip": client_ip()}})
 

@@ -753,6 +753,36 @@ def _v0010_comment_replies(db: Database, conn) -> None:
     _index(db, conn, "ix_pc_parent", "post_comments", "parent_id, id")
 
 
+def _v0011_vl_identity(db: Database, conn) -> None:
+    """
+    One public identity per account: ``users.vl_id``.
+
+    Explore and Advanced are two clients of the same account (docs/ROADMAP.md),
+    and games/clips/groups/reputation all need to point at something that is not a
+    serial row id. Random and immutable — see `backend/vlid.py` for why an alias
+    built from `users.id` would have been a scraping cursor.
+
+    Backfills existing rows so an upgraded install keeps its users, then adds the
+    unique index that makes the value actually one-per-account.
+    """
+    from . import vlid
+
+    _add_cols(db, conn, "users", [("vl_id", "TEXT")])
+    if not _table_exists(db, conn, "users"):
+        return
+    # an empty string would collide with every other empty string under a unique
+    # index, and old code paths could have written one
+    _backfill(db, conn, "UPDATE users SET vl_id = NULL WHERE vl_id = ''")
+    pending = db.query(conn, "SELECT id FROM users WHERE vl_id IS NULL ORDER BY id")
+    for row in pending:
+        try:
+            vlid.assign(db, conn, int(row["id"]))
+        except Exception as exc:                                        # pragma: no cover
+            log.warning("vl_id_backfill_failed",
+                        extra={"ctx": {"user_id": row["id"], "err": str(exc)[:120]}})
+    _index(db, conn, "ux_users_vl_id", "users", "vl_id", unique=True)
+
+
 def _v0009_perf_indexes(db: Database, conn) -> None:
     """Final index pass — covers every field the spec calls out by name."""
     for name, table, cols, unique in [
@@ -808,6 +838,8 @@ MIGRATIONS: list[Migration] = [
               "Offline game catalog seed (no third-party API)."),
     Migration(10, "comment_reply_counts", _v0010_comment_replies,
               "denormalised reply_count on top-level comments + parent index"),
+    Migration(11, "vl_identity", _v0011_vl_identity,
+              "users.vl_id — one stable, non-sequential public id, backfilled"),
     Migration(9, "perf_indexes", _v0009_perf_indexes,
               "Indexes for every hot query field + counter backfill."),
 ]

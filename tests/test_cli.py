@@ -129,7 +129,12 @@ def test_migrate_is_idempotent_and_reports_the_version(app, tmp_path):
     try:
         code, out = run(["migrate"])
         assert code == 0
-        assert "0001:baseline_legacy_schema" in out and "version=10" in out
+        # not hard-coded: a test that names the head version fails on every
+        # migration anyone adds, which trains people to edit tests instead of
+        # reading them
+        from backend.migrations import expected_version
+        assert "0001:baseline_legacy_schema" in out
+        assert f"version={expected_version()}" in out, out
         code2, out2 = run(["migrate"])
         assert code2 == 0
         assert "⏭" in out2 and "applied" not in out2, out2

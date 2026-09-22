@@ -157,6 +157,8 @@ def cmd_create_admin(args: argparse.Namespace) -> int:
                 return 2
             db.execute(conn, """UPDATE users SET role = 'admin', password = ?, status = 'active',
                                  is_banned = 0 WHERE id = ?""", (hash_password(pw), row["id"])).close()
+            from . import vlid
+            vlid.assign(db, conn, int(row["id"]))   # promoted accounts get one too
             conn.commit()
             _ok(f"@{args.username} promoted to administrator (id={row['id']})")
             return 0
@@ -173,8 +175,10 @@ def cmd_create_admin(args: argparse.Namespace) -> int:
             VALUES (?, ?, ?, ?, 'admin', 'active', 'online')""",
             (args.username, hash_password(pw), args.full_name or "Administrator",
              "administrator"))
+        from . import vlid
+        assigned = vlid.assign(db, conn, uid)
         conn.commit()
-        _ok(f"administrator created: @{args.username} (id={uid})")
+        _ok(f"administrator created: @{args.username} (id={uid}) · VL ID {assigned}")
         print("  ℹ️  رمز در هیچ لاگی نوشته نمی‌شود؛ اگر فراموش شد با `passwd` عوضش کنید.")
         return 0
     finally:

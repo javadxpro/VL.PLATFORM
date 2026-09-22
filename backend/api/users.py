@@ -35,7 +35,7 @@ mod = Module("users")
 log = get_logger("api.users")
 
 USER_PUBLIC_COLS = ("id, username, full_name, bio, avatar, role, created_at, "
-                    "last_seen_at, presence, accent, location, website")
+                    "last_seen_at, presence, accent, location, website, vl_id")
 
 
 # --------------------------------------------------------------------------
