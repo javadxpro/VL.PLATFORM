@@ -159,6 +159,7 @@ Local_Network/
 ├── docs/LEGACY_MAP.md     # نگاشت مسیر قدیمی → endpoint جدید
 ├── docs/security.md       # چه اقدامی فعال است و چه چیزی عمداً انجام نشده
 ├── docs/TERMUX.md         # اجرا روی گوشی (Termux) — نصب، wake-lock، بوت خودکار
+├── docs/ROADMAP.md        # قفل فازها: چه چیزی در نسخهٔ فعلی است و چه چیزی نه
 ├── docs/AUDIT.md          # گزارش ممیزی نسخهٔ قبلی و هر اصلاح انجام‌شده
 ├── tools/gen_api_docs.py  # تولیدکنندهٔ docs/API.md و docs/LEGACY_MAP.md
 ├── termux.sh              # همان مراحل Termux در یک اسکریپت (install / run / boot)
