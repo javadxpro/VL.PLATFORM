@@ -10,14 +10,16 @@
 
 بدون تغییر در رابط کاربری، بک‌اند از یک فایل تک‌سرور به یک بستهٔ ماژولار تبدیل شد:
 
-- 🧱 **ساختار ماژولار:** `backend/` با ۱۴ ماژول API، لایهٔ دسترسی، مهاجرت‌های نسخه‌دار (v1…v10) و `server.py` به‌عنوان یک shim باریک — مسیرهای قدیمی (`/login`، `/users`، `/posts` …) سرِ جایشان و با همان شکل پاسخ کار می‌کنند.
+- 🧱 **ساختار ماژولار:** `backend/` با ۱۴ ماژول API، لایهٔ دسترسی، مهاجرت‌های نسخه‌دار (v1…v11) و `server.py` به‌عنوان یک shim باریک — مسیرهای قدیمی (`/login`، `/users`، `/posts` …) سرِ جایشان و با همان شکل پاسخ کار می‌کنند.
 - 🔐 **حذف حساب پیش‌فرض `admin/admin123`:** ادمین اول فقط از localhost و با «کد راه‌اندازی» یک‌بارمصرف ساخته می‌شود، یا از CLI.
 - 🔑 **نشست‌های واقعی:** توکن بearer با انقضا، چرخش (rotation) در هر ورود، سقف نشست برای هر کاربر، و ابطال فوری هنگام خروج/تغییر رمز/بن.
 - 🧯 **اعتبارسنجی سخت‌گیرانه:** رمز عبور با PBKDF2-SHA256 (پیش‌فرض ۲۴۰٬۰۰۰ تکرار) + ارتقای خودکار هش‌های قدیمی در اولین ورود؛ Rate-limit با سطل‌های کرانه‌دار؛ CSRF با بررسی Origin برای متدهای خطرناک.
 - 👁️ **حریم خصوصی در SQL:** فید، استوری و پست‌ها بر اساس سطح دسترسی (public/followers/friends/private) در خود کوئری فیلتر می‌شوند، نه بعد از گرفتن داده.
 - 📦 **آپلود امن:** نام فایل تولیدی است، نوع با magic bytes تشخیص داده می‌شود (نه از روی پسوند)، `.svg` رد می‌شود، و فایل یتیم جارو می‌شود.
 - 🖥️ **CLI:** `python -m backend run|migrate|create-admin|passwd|token|routes|doctor|janitor|sweep`.
-- 🧪 **تست:** ۱۵۰ تست pytest که قرارداد HTTP فرانت‌اند و قوانین دسترسی را می‌پوشانند (`python -m pytest tests/`).
+- 🆔 **VL ID:** هر حساب یک شناسهٔ عمومیِ یکتا و غیرقابل‌تغییر (`VL-XXXX-XXXX`) دارد که در پروفایل‌ها و لیست کاربران دیده می‌شود؛ از شمارهٔ داخلی حساب ساخته نمی‌شود تا قابل اسکراب نباشد (migration `0011`، `docs/ROADMAP.md` §P1).
+- 🧪 **تست:** ۲۰۴ تست pytest که قرارداد HTTP فرانت‌اند و قوانین دسترسی را می‌پوشانند (`python -m pytest tests/`).
+- 🌐 **نسخهٔ نمایشی روی GitHub Pages:** همان رابط، بدون سرور و با دادهٔ محلیِ مرورگر — <https://javadxpro.github.io/VL.PLATFORM/> (`pages/vl-demo.js` + `tools/build_pages.py`، توضیح کامل در `docs/PAGES.md`).
 - 🧳 **سالمت عملیاتی:** `/healthz`، هدرهای امنیتی، `Dockerfile` با کاربر بدون امتیاز و HEALTHCHECK، `render.yaml`، `.env.example` و GitHub Actions.
 
 ---
@@ -154,14 +156,19 @@ Local_Network/
 │   ├── realtime.py notify.py presence.py discovery.py janitor.py
 │   └── cli.py             # python -m backend …
 ├── index.html             # رابط کاربری کامل (HTML/CSS/JS - بدون وابستگی خارجی)
+├── pages/
+│   ├── vl-demo.js         # موتور نسخهٔ نمایشی: fetch را محلی سرو می‌کند (برای GitHub Pages)
+│   └── demo-selftest.js   # ۵۴ بررسی روی همان موتور، با node و بدون فریمورک تست
 ├── tests/                 # ۱۵۹ تست pytest (قرارداد API + امنیت + CLI)
 ├── docs/API.md            # مرجع مسیرها — از خود برنامه تولید می‌شود
 ├── docs/LEGACY_MAP.md     # نگاشت مسیر قدیمی → endpoint جدید
 ├── docs/security.md       # چه اقدامی فعال است و چه چیزی عمداً انجام نشده
 ├── docs/TERMUX.md         # اجرا روی گوشی (Termux) — نصب، wake-lock، بوت خودکار
 ├── docs/ROADMAP.md        # قفل فازها: چه چیزی در نسخهٔ فعلی است و چه چیزی نه
+├── docs/PAGES.md          # نسخهٔ نمایشی روی GitHub Pages: چه چیزی هست و چه چیزی عمداً نیست
 ├── docs/AUDIT.md          # گزارش ممیزی نسخهٔ قبلی و هر اصلاح انجام‌شده
 ├── tools/gen_api_docs.py  # تولیدکنندهٔ docs/API.md و docs/LEGACY_MAP.md
+├── tools/build_pages.py   # بیلد نسخهٔ نمایشی Pages (فقط stdlib؛ بیلد commit نمی‌شود)
 ├── termux.sh              # همان مراحل Termux در یک اسکریپت (install / run / boot)
 ├── LICENSE                # تمام حقوق محفوظ است — هیچ مجوزی نمی‌دهد
 ├── THIRD_PARTY_NOTICES.md # مجوز قطعه‌های شخص ثالث که در مخزن آمده‌اند

@@ -1,0 +1,84 @@
+name: pages
+
+# GitHub Pages hosts a *demo*: the same UI, driven by pages/vl-demo.js instead of a
+# server (Pages cannot run one). The bundle is built in CI and never committed —
+# `index.html` stays the single copy of the frontend.
+#
+# A pull_request runs the build and the demo self-test but does not deploy, so a
+# broken index.html cannot take the live site down.
+
+on:
+  push:
+    branches: [main, arena/01a098a4-vl-platform]
+    paths:
+      - index.html
+      - pages/**
+      - static/fonts/**
+      - tools/build_pages.py
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - index.html
+      - pages/**
+      - static/fonts/**
+      - tools/build_pages.py
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: build the bundle
+        run: python tools/build_pages.py --out _site
+      # the demo replaces fetch, so it is exercised for real here — node ships with
+      # the runner, nothing to install (tests/test_pages_demo.py runs the same file
+      # and skips it where node is absent)
+      - name: demo self-test
+        run: node pages/demo-selftest.js
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Settings → Pages must say "GitHub Actions" before deploy-pages can do
+      # anything, and the settings toggle is not something a first-time repo has.
+      # The same API call with this job's own `pages: write` token does it once, and
+      # is a no-op afterwards (409 = already enabled), so the workflow is self-
+      # sufficient without anyone opening Settings.
+      - name: enable Pages (first run only)
+        run: |
+          code=$(curl -sS -o /tmp/pages.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d '{"build_type":"workflow"}' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")
+          echo "POST /repos/…/pages → $code"
+          case "$code" in
+            201|409) exit 0 ;;
+            *) cat /tmp/pages.json; exit 1 ;;
+          esac
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - id: deployment
+        uses: actions/deploy-pages@v4

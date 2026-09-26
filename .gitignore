@@ -12,3 +12,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# بیلد نسخهٔ نمایشی Pages — در CI ساخته می‌شود، commit نمی‌شود
+build/
