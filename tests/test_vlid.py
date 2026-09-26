@@ -2,9 +2,10 @@
 VL ID — one stable public identity per account (docs/ROADMAP.md, P1).
 
 The interesting property is not the format, it is that *every* way of creating a
-user ends up with an id, and that nothing can move it afterwards. Both are the
-kind of thing that decays silently: a new signup path added next month, or a
-profile handler that starts accepting `vl_id`.
+user ends up with an id, that nothing can move it afterwards, and that the schema
+change itself cannot brick an existing install. All three are the kind of thing
+that decays silently: a new signup path, a profile handler that starts accepting
+`vl_id`, or one hand-edited row that makes the unique index impossible to create.
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ def test_the_id_is_public_on_the_profile_surface(app, users):
     listed = bob.get("/api/users").get_json()["users"]
     by_id = {u["id"]: u.get("vl_id") for u in listed}
     assert by_id.get(alice.id) == mine, "the listing projection dropped vl_id"
-    # the legacy contract keeps working too: a bare array, same column present
+    # the legacy contract keeps working too: bare array, same column present
     bare = bob.get("/users").get_json()
     assert isinstance(bare, list) and any(u["id"] == alice.id and u.get("vl_id") for u in bare)
 
@@ -79,7 +80,7 @@ def test_profile_update_cannot_move_an_identity(app, users):
     r = alice.post("/api/users/me/profile", json={"full_name": "Renamed", "vl_id": "VL-0000-0000"})
     assert r.status_code == 200, r.get_json()
     assert alice.get("/api/auth/me").get_json()["user"]["vl_id"] == before
-    # an id a user can rewrite is not an identity — history and blame would move with it
+    # an id a user can rewrite is not an identity — history and blame move with it
 
 
 def test_there_is_no_lookup_endpoint_yet(app):
@@ -104,7 +105,7 @@ def test_migration_backfills_rows_that_predate_it(app, users):
     c = db.connect()
     try:
         db.execute(c, "UPDATE users SET vl_id = NULL WHERE username IN ('alice','bob')").close()
-        # the empty-string case is the one that would break the unique index
+        # empty strings are the case that would break the unique index outright
         db.execute(c, "UPDATE users SET vl_id = '' WHERE username = 'carol'").close()
         c.commit()
         assert db.scalar(c, "SELECT COUNT(*) FROM users WHERE vl_id IS NULL OR vl_id = ''") == 3
@@ -126,9 +127,70 @@ def test_migration_backfills_rows_that_predate_it(app, users):
         db.close(c)
 
 
-def test_unique_index_is_the_real_guard(app, users):
-    import sqlite3
+def test_a_duplicated_id_cannot_brick_the_install(app, users):
+    """
+    The unique index is the guarantee, but one shared value makes its creation
+    fail — and `run_migrations` wraps the run in a single transaction and re-raises,
+    so an install with a hand-written duplicate would never boot again. 0011
+    repairs duplicates first and the oldest holder keeps its id.
+    """
+    from backend import migrations
+    from backend.config import get_config
+    from backend.db import Database
 
+    cfg = get_config()
+    db = Database(engine=cfg.db_engine, db_path=str(cfg.db_file))
+    c = db.connect()
+    try:
+        shared = users["alice"].get("/api/auth/me").get_json()["user"]["vl_id"]
+        # remove the guard first: this is what an old install looks like — column
+        # present, duplicates in it, index not created yet
+        db.execute(c, "DROP INDEX IF EXISTS ux_users_vl_id").close()
+        db.execute(c, "UPDATE users SET vl_id = ? WHERE username IN ('bob','carol')",
+                   (shared,)).close()
+        c.commit()
+        assert db.scalar(c, "SELECT COUNT(*) FROM users WHERE vl_id = ?", (shared,)) == 3
+
+        migrations._v0011_vl_identity(db, c)
+        c.commit()
+
+        vals = [r["vl_id"] for r in db.query(c, "SELECT vl_id FROM users ORDER BY id")]
+        assert all(vals) and len(vals) == len(set(vals)), vals
+        assert db.scalar(c, "SELECT vl_id FROM users WHERE username = 'alice'") == shared
+        # the index is back, so the duplicate is now impossible
+        with pytest.raises(Exception) as exc:
+            db.execute(c, "INSERT INTO users (username, password, vl_id) VALUES ('dup','x',?)",
+                       (shared,))
+        assert "unique" in str(exc.value).lower()
+    finally:
+        db.close(c)
+
+
+def test_the_step_is_dialect_safe(app):
+    """
+    0011 is authored once in the SQLite subset and translated for PostgreSQL, so a
+    construct that survives SQLite but gets mangled by `translate_ddl` would only
+    ever show up on a Postgres install (docs/ROADMAP.md rule 1).
+    """
+    import inspect
+
+    from backend import migrations
+    from backend.db import POSTGRES
+
+    src = inspect.getsource(migrations._v0011_vl_identity)
+    for sqlite_only in ("INSERT OR IGNORE", "datetime(", "PRAGMA"):
+        assert sqlite_only not in src, f"0011 uses SQLite-only syntax: {sqlite_only}"
+
+    for stmt in (
+        "ALTER TABLE users ADD COLUMN vl_id TEXT",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_users_vl_id ON users (vl_id)",
+        "UPDATE users SET vl_id = NULL WHERE vl_id = ''",
+    ):
+        assert migrations.translate_ddl(stmt, POSTGRES) == stmt, stmt
+
+
+# ------------------------------------------------------------------------ assign
+def test_unique_index_is_the_real_guard(app, users):
     from backend.config import get_config
     from backend.db import Database
 
@@ -140,7 +202,7 @@ def test_unique_index_is_the_real_guard(app, users):
         with pytest.raises(Exception) as exc:
             db.execute(c, "INSERT INTO users (username, password, vl_id) VALUES ('dup','x',?)",
                        (taken,))
-        assert "unique" in str(exc.value).lower() or isinstance(exc.value, sqlite3.IntegrityError)
+        assert "unique" in str(exc.value).lower()
     finally:
         db.close(c)
 
@@ -155,6 +217,25 @@ def test_assign_returns_the_existing_value(app, users):
     try:
         current = db.scalar(c, "SELECT vl_id FROM users WHERE id = ?", (users["alice"].id,))
         assert vlid.assign(db, c, users["alice"].id) == current
+    finally:
+        db.close(c)
+
+
+def test_assign_force_rotates_only_when_asked(app, users):
+    from backend.config import get_config
+    from backend.db import Database
+
+    cfg = get_config()
+    db = Database(engine=cfg.db_engine, db_path=str(cfg.db_file))
+    c = db.connect()
+    try:
+        before = db.scalar(c, "SELECT vl_id FROM users WHERE id = ?", (users["alice"].id,))
+        assert vlid.assign(db, c, users["alice"].id, force=True) != before
+        assert vlid.assign(db, c, users["alice"].id) == db.scalar(
+            c, "SELECT vl_id FROM users WHERE id = ?", (users["alice"].id,))
+        # put the fixture back as the other tests expect it
+        db.execute(c, "UPDATE users SET vl_id = ? WHERE id = ?", (before, users["alice"].id)).close()
+        c.commit()
     finally:
         db.close(c)
 

@@ -780,6 +780,20 @@ def _v0011_vl_identity(db: Database, conn) -> None:
         except Exception as exc:                                        # pragma: no cover
             log.warning("vl_id_backfill_failed",
                         extra={"ctx": {"user_id": row["id"], "err": str(exc)[:120]}})
+    # A single duplicated value would make the unique index fail, and since the
+    # runner is transactional that means the install never boots again. Only
+    # reachable if something wrote the column by hand (it did not exist before this
+    # step) — but the repair costs two queries and the failure mode is total, so the
+    # oldest holder of a shared id keeps it and the rest get fresh ones.
+    shared = db.query(conn, """SELECT vl_id FROM users WHERE vl_id IS NOT NULL
+                               GROUP BY vl_id HAVING COUNT(*) > 1 ORDER BY vl_id""")
+    for dup in shared:
+        victims = db.query(conn, "SELECT id FROM users WHERE vl_id = ? ORDER BY id",
+                           (dup["vl_id"],))
+        for v in list(victims)[1:]:
+            vlid.assign(db, conn, int(v["id"]), force=True)
+            log.warning("vl_id_duplicate_reassigned",
+                        extra={"ctx": {"user_id": v["id"], "was": dup["vl_id"]}})
     _index(db, conn, "ux_users_vl_id", "users", "vl_id", unique=True)
 
 

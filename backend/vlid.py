@@ -71,17 +71,23 @@ def looks_valid(value: Any) -> bool:
     return bool(value) and bool(FORMAT_RE.match(str(value).strip()))
 
 
-def assign(db, conn, user_id: int, *, table: str = "users", column: str = "vl_id") -> str:
+def assign(db, conn, user_id: int, *, table: str = "users", column: str = "vl_id",
+           force: bool = False) -> str:
     """
     Give *user_id* its VL ID, or return the one it already has.
 
     Idempotent by design: registration, the setup bootstrap, `backend create-admin`
     and the 0011 backfill all call this, and whichever runs last must not rotate
     an id somebody may already have shared.
+
+    `force=True` skips that short-circuit. Only the duplicate-repair path in
+    migration 0011 may use it — it is the one place where an existing value is
+    provably wrong (two accounts share it), and even there the first account keeps
+    its id.
     """
     row = db.query_one(conn, f"SELECT {column} AS v FROM {table} WHERE id = ?", (user_id,))
     current = (row or {}).get("v")
-    if current:
+    if current and not force:
         return str(current)
     for _ in range(_MAX_TRIES):
         candidate = new()
